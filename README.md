@@ -16,8 +16,8 @@ Zone Robotics builds a modular ESP32-S3 robotics platform: hardware, camera stre
 | [`ZROS/`](ZROS/) | **Free** ESP32-S3 firmware — the local Zone Robotics OS. Download and flash onto your own ESP32-S3 Sense. |
 | [`ZRSense/`](ZRSense/) | ZRSense board — ESP32-S3 sensing board. Datasheets, pinouts, mechanical drawings, media. |
 | [`ZRCore/`](ZRCore/) | ZRCore board — motion + power core. Datasheets, pinouts, mechanical drawings, media. |
-| [`ZROneMicro/`](ZROneMicro/) | ZROne Micro — compact ZRSense-only robot. Assembly notes and media. |
-| [`ZROne/`](ZROne/) | ZROne — full modular tracked platform. Media, docs, in-development notes. |
+| [`ZRCar/`](ZRCar/) | ZRCar — compact ZRSense-only robot. Assembly notes and media. |
+| [`ZRTank/`](ZRTank/) | ZRTank — full modular tracked platform. Media, docs, in-development notes. |
 | [`media/`](media/) | Shared brand and product visuals — logos, renders, infographics. |
 
 ## ZROS — free firmware
@@ -37,8 +37,8 @@ The full product lineup — hardware to buy or flash yourself.
 | 00 | [ZROS](ZROS/) — free firmware | Available now |
 | 01 | [ZRSense](ZRSense/) — sensing board | Selling on Tindie soon |
 | 02 | [ZRCore](ZRCore/) — motion + power board | Available for larger builds |
-| 03 | [ZROne Micro](ZROneMicro/) — compact robot | Selling first |
-| 04 | [ZROne](ZROne/) — full modular tank | In development |
+| 03 | [ZRCar](ZRCar/) — compact ZRSense-only robot | Shipping first |
+| 04 | [ZRTank](ZRTank/) — full modular tracked platform | In development |
 | 05 | ZR Cloud — browser control | Live at <https://home.zonerobotics.com/dashboard> |
 
 ## Issues and questions
