@@ -1,6 +1,6 @@
 # ZRCar — compact ZRSense-only robot
 
-![ZRCar image](https://github.com/zonemikel/ZoneRobotics/blob/main/ZRCar/IMG_0027-small.JPG?raw=true)
+![ZRCar image](https://github.com/zonemikel/ZoneRobotics/blob/main/ZRCar/IMG_0027-small.jpg?raw=true)
 
 
 **ZRCar is a small, programmable robot car built around the ZRSense robotics controller and a LEGO Technic-compatible construction platform.**
