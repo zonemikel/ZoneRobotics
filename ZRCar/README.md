@@ -9,3 +9,13 @@ Assembly notes, chassis files, media and any bill-of-materials for the ZRCar bui
 ## Product page
 
 <https://home.zonerobotics.com/products/zrcar>
+
+## Youtube Videos 
+
+- build video  
+<https://www.youtube.com/watch?v=F3EoujWpK7Y>
+
+- shorts
+https://www.youtube.com/shorts/fNSLXJ67s0I
+https://www.youtube.com/shorts/9qGsp3AwLaQ
+
