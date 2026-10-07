@@ -13,3 +13,7 @@ Datasheets, pinouts, board renders, mechanical drawings, and any media specific 
 ## Runs ZROS
 
 The board is built to run [ZROS](../ZROS/) — the free Zone Robotics firmware.
+
+## Errata 
+
+!https://github.com/zonemikel/ZoneRobotics/blob/main/ZRSense/ZRSense_i2c_silkscreen_err.PNG
