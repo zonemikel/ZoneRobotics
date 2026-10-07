@@ -16,4 +16,4 @@ The board is built to run [ZROS](../ZROS/) — the free Zone Robotics firmware.
 
 ## Errata 
 
-!https://github.com/zonemikel/ZoneRobotics/blob/main/ZRSense/ZRSense_i2c_silkscreen_err.PNG
+![i2c error pic]([URL or Image Path](https://github.com/zonemikel/ZoneRobotics/blob/main/ZRSense/ZRSense_i2c_silkscreen_err.PNG))
