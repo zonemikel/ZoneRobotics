@@ -16,7 +16,7 @@ Designed for two audiences:
 ## Install
 
 ```bash
-pip install websocket-client
+python -m pip install "websocket-client==1.6.4"
 ```
 
 The SDK itself is a single file (`zrsense.py`) — copy it into your project
