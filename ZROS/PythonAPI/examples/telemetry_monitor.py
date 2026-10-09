@@ -18,13 +18,15 @@ def main(host: str) -> None:
     def on_telem(t):
         dg = t.get("dg") or []
         nearest = min((v for v in dg if v > 0), default=None)
+        # Telemetry uses SHORT keys: t=°C r=rssi h=heap f=fps c=cpu
+        # b=battery u=uptime d=distance dg=ToF grid (NOT 'temp'/'rssi'/…).
         print(
-            f"temp {fmt(t.get('temp'), '°C')}  "
-            f"rssi {fmt(t.get('rssi'), 'dBm')}  "
-            f"heap {fmt(t.get('heap'), 'K', 5)}  "
-            f"cpu {fmt(t.get('cpu'), '%',  4)}  "
-            f"bat {fmt(t.get('b'),    '%',  4)}  "
-            f"up {fmt(t.get('uptime'), 's', 6)}  "
+            f"temp {fmt(t.get('t'),  '°C')}  "
+            f"rssi {fmt(t.get('r'),  'dBm')}  "
+            f"heap {fmt(t.get('h'),  'K', 5)}  "
+            f"cpu {fmt(t.get('c'),   '%',  4)}  "
+            f"bat {fmt(t.get('b'),   '%',  4)}  "
+            f"up {fmt(t.get('u'),    's', 6)}  "
             f"tof-nearest {fmt(nearest, 'mm', 5)}",
             flush=True,
         )

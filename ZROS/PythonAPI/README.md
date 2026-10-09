@@ -19,6 +19,11 @@ Designed for two audiences:
 python -m pip install "websocket-client==1.6.4"
 ```
 
+**Pin 1.6.4.** websocket-client 1.9+ strict-validates frames and rejects the
+bot's WebSocket frames with `rsv is not implemented, yet` or `Invalid opcode`,
+which kills the receive loop. If you hit those errors you're on a newer
+version — reinstall with the pin above.
+
 The SDK itself is a single file (`zrsense.py`) — copy it into your project
 or drop the folder on `PYTHONPATH`.
 
@@ -63,6 +68,41 @@ Optional constructor kwargs:
 | `session`      | `"A"`   | LAN session slot; `"B"` also exists for a 2nd viewer   |
 | `telemetry`    | `"all"` | pass `None` to skip the `TELEM:` subscription          |
 | `timeout`      | `5.0`   | initial connect timeout in seconds                     |
+| `auto_reconnect` | `True` | reconnect in the background if the link drops        |
+
+### Reconnection
+
+Telemetry is subscribed automatically on `connect()` (the `telemetry="all"`
+default), so you don't need to turn anything on. If the link drops — bot
+reboot, idle timeout, WiFi blip — the SDK no longer crashes with a traceback.
+With `auto_reconnect=True` (default) it reconnects in the background and keeps
+working on the **same** `Robot` object. You can also reconnect manually:
+
+```python
+if not bot.is_connected():
+    bot.connect()                 # reusable — no need to recreate Robot(...)
+
+bot.on_disconnect(lambda why: print("lost bot:", why))   # optional notice
+```
+
+### Telemetry fields
+
+The telemetry stream uses **short keys**. `wait_for_telemetry()` accepts both
+the raw key and a friendly alias, so `wait_for_telemetry("temp")` and
+`wait_for_telemetry("t")` both work:
+
+| ask for | key | | ask for | key |
+| :------ | :-- | :-- | :------ | :-- |
+| `temp` / `temperature` | `t` | | `heading` / `yaw` | `ih` |
+| `battery` | `b` | | `pitch` | `ipt` |
+| `rssi` | `r` | | `roll` | `irl` |
+| `fps` | `f` | | `accel_x/y/z` | `iax/iay/iaz` |
+| `cpu` | `c` | | `distance` | `d` |
+| `mem` / `memory` | `m` | | `flipped` | `ifl` |
+
+IMU fields only arrive when the MPU6050 is enabled; distance only when a
+rangefinder is enabled. `bot.telemetry()` returns the latest full snapshot so
+you can see exactly which keys are coming in.
 
 ## Device namespaces
 
@@ -131,10 +171,13 @@ bot.drive.backward(power=40); bot.drive.stop()
 The bot broadcasts a telemetry frame every ~1 s (rate depends on which
 `TELEM:` filter you subscribed to). Register a callback:
 
+The raw dict uses **short keys** (see the Telemetry fields table above):
+`t`=°C, `r`=rssi, `h`=heap KB, `b`=battery %, `u`=uptime s, `dg`=ToF grid.
+
 ```python
 def on_telem(t):
-    print(f"temp {t.get('temp')} °C   rssi {t.get('rssi')} dBm   "
-          f"heap {t.get('heap')} KB   bat {t.get('b')} %")
+    print(f"temp {t.get('t')} °C   rssi {t.get('r')} dBm   "
+          f"heap {t.get('h')} KB   bat {t.get('b')} %")
 
 bot.on_telemetry(on_telem)
 bot.wait(10)                     # keep the main thread alive
@@ -144,7 +187,7 @@ Or read the latest snapshot on demand:
 
 ```python
 snap = bot.telemetry()
-print(snap.get("uptime"), snap.get("dg"))    # dg = ToF grid array (16 or 64 mm)
+print(snap.get("u"), snap.get("dg"))    # u = uptime (s), dg = ToF grid array (16 or 64 mm)
 ```
 
 ## Ask-and-wait pattern

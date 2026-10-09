@@ -8,7 +8,12 @@ uses, so anything you can click in the browser you can script here.
 
 Install
 -------
-    pip install websocket-client
+    python -m pip install "websocket-client==1.6.4"
+
+    IMPORTANT: pin 1.6.4. websocket-client 1.9+ strict-validates frames and
+    rejects the bot's WebSocket frames with "rsv is not implemented, yet" or
+    "Invalid opcode", which kills the receive loop. If you see those errors,
+    you are on a newer version — reinstall with the pin above.
 
 Quick start
 -----------
@@ -59,6 +64,29 @@ __all__ = ["Robot", "ZRSenseError"]
 __version__ = "0.1.0"
 
 log = logging.getLogger("zrsense")
+
+# Telemetry frames use terse single/short keys. Map friendly names people
+# naturally reach for onto the real keys so wait_for_telemetry("temp") works.
+# (The TELEM subscription filter uses the friendly names, but the emitted
+# telemetry KEYS are short — that mismatch tripped up early testers.)
+_TELEM_ALIASES = {
+    "temp": "t", "temperature": "t",
+    "battery": "b", "batt": "b",
+    "rssi": "r", "signal": "r",
+    "fps": "f",
+    "heap": "h",
+    "cpu": "c", "cpuload": "c",
+    "mem": "m", "memory": "m",
+    "uptime": "u",
+    "distance": "d", "dist": "d", "range": "d",
+    "heading": "ih", "yaw": "ih",
+    "pitch": "ipt",
+    "roll": "irl",
+    "accel_x": "iax", "ax": "iax",
+    "accel_y": "iay", "ay": "iay",
+    "accel_z": "iaz", "az": "iaz",
+    "flipped": "ifl", "flip": "ifl",
+}
 
 
 class ZRSenseError(RuntimeError):
@@ -370,9 +398,11 @@ class Robot:
             bot.rgb.color(0, 255, 0)
             bot.wait(1)
 
-    Streaming telemetry (fires ~1/s from the firmware):
+    Streaming telemetry (fires ~1/s from the firmware). The dict uses SHORT
+    keys: t=°C, r=rssi, h=heap KB, b=battery %, u=uptime s (see
+    wait_for_telemetry's docstring for the full map):
 
-        bot.on_telemetry(lambda t: print(t.get("temp"), "°C"))
+        bot.on_telemetry(lambda t: print(t.get("t"), "°C"))
 
     Video (only if the bot's camera is up):
 
@@ -400,6 +430,7 @@ class Robot:
         session: str = "A",
         telemetry: Optional[str] = "all",
         timeout: float = 5.0,
+        auto_reconnect: bool = True,
     ):
         self.host = host
         self.port = port
@@ -407,17 +438,25 @@ class Robot:
         self.session = session
         self.telemetry_filter = telemetry
         self.timeout = float(timeout)
+        # When True, an unexpected drop (bot reboot, idle timeout, WiFi blip)
+        # is handled in the background: the recv loop won't crash, state is
+        # reset, and a reconnect thread retries with backoff until it's back.
+        # The same Robot object keeps working — no need to recreate it.
+        self.auto_reconnect = bool(auto_reconnect)
 
         # WebSocket + receive thread state
         self._ws: Optional[websocket.WebSocket] = None
         self._recv_thread: Optional[threading.Thread] = None
+        self._reconnect_thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._send_lock = threading.Lock()
+        self._conn_lock = threading.Lock()   # serialises connect/reconnect
 
         # Callback lists (thread-safe under GIL for append/iterate-copy)
         self._telem_cbs: List[Callable[[Dict[str, Any]], None]] = []
         self._video_cbs: List[Callable[[bytes, int], None]] = []
         self._msg_cbs:   List[Callable[[Dict[str, Any]], None]] = []
+        self._disconnect_cbs: List[Callable[[str], None]] = []
 
         # Latest telemetry snapshot
         self._last_telem: Dict[str, Any] = {}
@@ -449,38 +488,52 @@ class Robot:
 
     # ── lifecycle ───────────────────────────────────────────────────
     def connect(self) -> None:
-        """Open the WebSocket and run the ZR handshake."""
-        if self._ws is not None:
-            return
-        url = f"ws://{self.host}:{self.port}{self.path}"
-        log.info("connecting %s", url)
-        try:
-            self._ws = websocket.create_connection(
-                url, timeout=self.timeout, enable_multithread=True,
+        """Open the WebSocket and run the ZR handshake.
+
+        Reusable: if an earlier connection dropped (bot reboot, idle timeout,
+        protocol error), just call ``bot.connect()`` again on the SAME object
+        — no need to recreate ``Robot(...)``. With ``auto_reconnect=True``
+        (the default) the SDK does this for you in the background anyway.
+        """
+        with self._conn_lock:
+            if self._ws is not None:
+                return  # already connected
+            # Reap a dead recv thread from a previous (dropped) session so we
+            # don't leak threads across reconnects.
+            if self._recv_thread and self._recv_thread.is_alive() \
+               and self._recv_thread is not threading.current_thread():
+                self._recv_thread.join(timeout=1.0)
+            url = f"ws://{self.host}:{self.port}{self.path}"
+            log.info("connecting %s", url)
+            try:
+                ws = websocket.create_connection(
+                    url, timeout=self.timeout, enable_multithread=True,
+                )
+            except Exception as e:
+                raise ZRSenseError(f"connect failed: {url}: {e}") from e
+            # Non-blocking recv (short timeout) so the recv loop can honour ._stop.
+            ws.settimeout(0.5)
+            self._ws = ws
+            self._stop.clear()
+            self._recv_thread = threading.Thread(
+                target=self._recv_loop, name="zrsense-recv", daemon=True,
             )
-        except Exception as e:
-            raise ZRSenseError(f"connect failed: {url}: {e}") from e
-        # Non-blocking recv (short timeout) so the recv loop can honour ._stop.
-        self._ws.settimeout(0.5)
-        self._stop.clear()
-        self._recv_thread = threading.Thread(
-            target=self._recv_loop, name="zrsense-recv", daemon=True,
-        )
-        self._recv_thread.start()
-        # Handshake: same three frames the browser /console page sends.
-        self._raw_send(json.dumps({"type": "connect"}))
-        self._raw_send(f"SESSION:{self.session}")
-        if self.telemetry_filter:
-            self._raw_send(f"TELEM:{self.telemetry_filter}")
+            self._recv_thread.start()
+            # Handshake: same three frames the browser /console page sends.
+            self._raw_send(json.dumps({"type": "connect"}))
+            self._raw_send(f"SESSION:{self.session}")
+            if self.telemetry_filter:
+                self._raw_send(f"TELEM:{self.telemetry_filter}")
 
     def close(self) -> None:
-        """Tear down the WebSocket + recv thread."""
-        self._stop.set()
+        """Tear down the WebSocket + recv thread (and stop auto-reconnect)."""
+        self._stop.set()   # tells recv loop + reconnect loop this is intentional
         ws, self._ws = self._ws, None
         if ws is not None:
             try: ws.close()
             except Exception: pass
-        if self._recv_thread and self._recv_thread.is_alive():
+        if self._recv_thread and self._recv_thread.is_alive() \
+           and self._recv_thread is not threading.current_thread():
             self._recv_thread.join(timeout=1.0)
 
     def is_connected(self) -> bool:
@@ -506,23 +559,99 @@ class Robot:
 
     # ── receive loop ────────────────────────────────────────────────
     def _recv_loop(self) -> None:
-        while not self._stop.is_set() and self._ws is not None:
+        reason: Optional[str] = None
+        ws = self._ws
+        while not self._stop.is_set() and ws is not None and ws is self._ws:
             try:
-                data = self._ws.recv()
+                data = ws.recv()
             except websocket.WebSocketTimeoutException:
                 continue
-            except (websocket.WebSocketConnectionClosedException, OSError):
+            except websocket.WebSocketConnectionClosedException:
+                reason = "connection closed by bot (reboot / idle timeout / slot taken)"
                 break
-            except Exception:
-                if not self._stop.is_set():
-                    log.exception("recv loop")
+            except websocket.WebSocketException as e:
+                # Protocol error — e.g. "rsv is not implemented, yet" or
+                # "Invalid opcode" from a too-new websocket-client (pin
+                # 1.6.4), or a desynced frame on a flaky link. Treat as a
+                # drop and handle gracefully instead of dumping a traceback.
+                reason = f"protocol error: {e}"
+                break
+            except OSError as e:
+                reason = f"socket error: {e}"
+                break
+            except Exception as e:  # pragma: no cover - defensive
+                reason = f"receive error: {e}"
                 break
             if not data:
                 continue
-            if isinstance(data, (bytes, bytearray)):
-                self._handle_binary(bytes(data))
-            else:
-                self._handle_text(data)
+            try:
+                if isinstance(data, (bytes, bytearray)):
+                    self._handle_binary(bytes(data))
+                else:
+                    self._handle_text(data)
+            except Exception:
+                log.exception("handling message")
+        # Loop ended. If the user didn't call close(), this was an unexpected
+        # drop — clean up and (optionally) reconnect in the background.
+        if not self._stop.is_set():
+            self._handle_unexpected_disconnect(reason or "receive loop ended")
+
+    def _handle_unexpected_disconnect(self, reason: str) -> None:
+        """Called from the recv thread when the link drops on its own."""
+        # Clear the socket so is_connected() is honest and connect() will work.
+        ws, self._ws = self._ws, None
+        if ws is not None:
+            try: ws.close()
+            except Exception: pass
+        log.warning("disconnected: %s", reason)
+        for cb in list(self._disconnect_cbs):
+            try: cb(reason)
+            except Exception: log.exception("disconnect cb")
+        if self.auto_reconnect and not self._stop.is_set():
+            self._start_reconnect()
+
+    def _start_reconnect(self) -> None:
+        # One reconnect thread at a time.
+        if self._reconnect_thread and self._reconnect_thread.is_alive():
+            return
+        self._reconnect_thread = threading.Thread(
+            target=self._reconnect_loop, name="zrsense-reconnect", daemon=True,
+        )
+        self._reconnect_thread.start()
+
+    def _reconnect_loop(self) -> None:
+        """Retry connect() with capped exponential backoff until it's back."""
+        delay = 0.5
+        fast_fails = 0
+        last_attempt = 0.0
+        while not self._stop.is_set() and self._ws is None:
+            # Wait out the backoff in short slices so close() stays responsive.
+            waited = 0.0
+            while waited < delay and not self._stop.is_set():
+                time.sleep(0.1)
+                waited += 0.1
+            if self._stop.is_set():
+                return
+            now = time.time()
+            quick = (now - last_attempt) < 3.0 if last_attempt else False
+            last_attempt = now
+            try:
+                self.connect()
+                log.info("reconnected")
+                return
+            except Exception as e:
+                # If connect keeps failing within seconds, it's likely the
+                # websocket-client version (frames rejected on handshake) or
+                # the bot being down — surface a clear hint, don't spin fast.
+                fast_fails = fast_fails + 1 if quick else 0
+                if fast_fails == 3:
+                    log.warning(
+                        "reconnect keeps failing fast (%s). If this is a "
+                        "'rsv'/'opcode' error, pin websocket-client==1.6.4.", e,
+                    )
+                else:
+                    log.info("reconnect attempt failed: %s", e)
+                delay = min(delay * 2, 10.0)
 
     def _handle_binary(self, data: bytes) -> None:
         # Optional 8-byte "T-prefix" carries the esp32-tx timestamp so the
@@ -571,6 +700,16 @@ class Robot:
     def on_message(self, cb: Callable[[Dict[str, Any]], None]) -> None:
         """Register a callback for every non-telemetry JSON message."""
         self._msg_cbs.append(cb)
+
+    def on_disconnect(self, cb: Callable[[str], None]) -> None:
+        """Register a callback fired when the link drops unexpectedly.
+
+        cb receives a short reason string. With auto_reconnect on, a reconnect
+        is already in progress by the time this fires — this is just a notice.
+
+            bot.on_disconnect(lambda why: print("lost bot:", why))
+        """
+        self._disconnect_cbs.append(cb)
 
     def telemetry(self) -> Dict[str, Any]:
         """Return the most recent telemetry snapshot (empty dict before the first frame)."""
@@ -625,17 +764,45 @@ class Robot:
     ) -> Optional[Any]:
         """Block until the next telemetry frame carries `field`, return its value.
 
-        Useful for one-shot reads:  temp = bot.wait_for_telemetry("temp")
+        The telemetry stream uses SHORT keys (temperature is "t", not "temp").
+        This method accepts BOTH the raw key and a friendly alias, so all of
+        these work:  bot.wait_for_telemetry("temp")  ==  wait_for_telemetry("t").
+
+        Common fields (alias -> raw key):
+            temp/temperature -> t      battery -> b        rssi -> r
+            fps -> f                   heap -> h           cpu -> c
+            mem/memory -> m            uptime -> u         distance/dist -> d
+            heading/yaw -> ih          pitch -> ipt        roll -> irl
+            accel_x -> iax  accel_y -> iay  accel_z -> iaz  flipped -> ifl
+
+        Note: IMU fields (ih/ipt/irl/...) only arrive when the MPU6050 is
+        enabled, and distance (d) only when a rangefinder is enabled. Call
+        bot.telemetry() to see the latest full snapshot of what's arriving.
+        Returns None on timeout.
         """
+        key = _TELEM_ALIASES.get(field.lower(), field)
         got: List[Any] = []
         evt = threading.Event()
         def _cb(t: Dict[str, Any]) -> None:
-            if field in t:
+            if key in t:
+                got.append(t[key])
+                evt.set()
+            elif field in t:   # also honour the exact name the caller passed
                 got.append(t[field])
                 evt.set()
         self._telem_cbs.append(_cb)
         try:
-            return got[0] if evt.wait(timeout) else None
+            if evt.wait(timeout):
+                return got[0]
+            # Timed out — help the caller see what keys ARE arriving.
+            snap = self._last_telem
+            if snap:
+                log.info("wait_for_telemetry(%r): no '%s' in telemetry; "
+                         "available keys: %s", field, key, sorted(snap.keys()))
+            else:
+                log.info("wait_for_telemetry(%r): no telemetry received — is "
+                         "the bot connected and telemetry subscribed?", field)
+            return None
         finally:
             try: self._telem_cbs.remove(_cb)
             except ValueError: pass
