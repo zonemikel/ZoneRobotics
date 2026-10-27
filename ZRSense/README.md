@@ -4,6 +4,9 @@
 
 Zone Robotics' ESP32-S3 Sense board. Hosts the third-party Seeed XIAO ESP32-S3 Sense module and carries the camera, sensors, RGB status lighting and I²C connections.
 
+Schematic
+![schematic](https://github.com/zonemikel/ZoneRobotics/blob/main/ZRSense/schematic.png?raw=true)
+
 Front View  
 ![frontpic](https://github.com/zonemikel/ZoneRobotics/blob/main/ZRSense/zr-sense-front-hi.png?raw=true)
 
