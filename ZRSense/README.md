@@ -1,5 +1,7 @@
 # ZRSense — ESP32-S3 sensing board
 
+** NOTE: we no longer include the rangefinder on the ZRSense board or with the ZRCar, see i2c_addons folder for ways to add your own.**
+
 Zone Robotics' ESP32-S3 Sense board. Hosts the third-party Seeed XIAO ESP32-S3 Sense module and carries the camera, sensors, RGB status lighting and I²C connections.
 
 Front View  
