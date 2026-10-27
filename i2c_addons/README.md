@@ -1,6 +1,6 @@
 # i2c addons  
 
-The ZRSense and ZRCore board both have expansion ports for i2c devices. This catalogs the device you can add. We have written drivers for devices that may not be included in the packages we sell like the rangefinder and mpu6050 gyro accelerometer but you can buy these from amazon in module form and add them. 
+The ZRSense and ZRCore board both have expansion ports for i2c devices. This catalogs the devices you can add. We have written drivers for devices that may not be included in the packages we sell like the rangefinder and mpu6050 gyro accelerometer but you can buy these from amazon in module form and add them. 
 
 
 ## Rangefinder VL53L5C
