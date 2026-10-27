@@ -16,11 +16,11 @@ ZRCar includes:
 - **Servo-controlled camera tilt**
 - **LiPo battery**
 - **RGB lighting**
-- **ToF distance sensing**
 - **Motor control**
 - **Wi-Fi connectivity**
 - **Onboard camera for video streaming**
 - **LEGO Technic-compatible construction**
+- ** NOTE: we no longer include the rangefinder on the ZRSense board or with the ZRCar, see i2c_addons folder for ways to add your own.**
 
 The ESP32-S3 comes **pre-programmed with ZROS firmware**, so you don't have to start by writing firmware or figuring out how all the hardware works together.
 
