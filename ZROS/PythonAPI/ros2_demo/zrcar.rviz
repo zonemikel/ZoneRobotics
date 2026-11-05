@@ -1,0 +1,82 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /TF1
+        - /Range1
+      Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Name: root
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 0.25
+      Plane Cell Count: 20
+      Color: 160; 160; 164
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: true
+      Show Axes: true
+      Show Arrows: false
+      Marker Scale: 0.3
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Name: Camera
+      Enabled: true
+      Max Value: 1
+      Min Value: 0
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /camera/image_raw
+      Value: true
+    - Class: rviz_default_plugins/Range
+      Name: Range
+      Enabled: true
+      Buffer Length: 1
+      Color: 255; 40; 0
+      Alpha: 0.5
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /range
+      Value: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: base_link
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+  Enabled: true
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 1.8
+      Focal Point:
+        X: 0.1
+        Y: 0
+        Z: 0
+      Pitch: 0.4
+      Yaw: 3.6
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Camera:
+    collapsed: false
+  Height: 800
+  Width: 1200
