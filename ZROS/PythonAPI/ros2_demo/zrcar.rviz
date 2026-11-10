@@ -5,6 +5,7 @@ Panels:
       Expanded:
         - /TF1
         - /Range1
+        - /RoomScan1
       Splitter Ratio: 0.5
 Visualization Manager:
   Class: ""
@@ -49,6 +50,22 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /range
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Name: RoomScan
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /scan
+      Style: Flat Squares
+      Size (m): 0.04
+      Color Transformer: FlatColor
+      Color: 0; 255; 128
+      Alpha: 1
+      Decay Time: 0
       Value: true
   Global Options:
     Background Color: 48; 48; 48

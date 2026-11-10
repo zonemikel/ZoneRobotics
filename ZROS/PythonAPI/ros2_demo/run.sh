@@ -5,6 +5,7 @@
 #   BOT_IP=192.168.1.46 ./run.sh bridge  # run the ROS<->bot bridge (leave running)
 #   ./run.sh teleop                      # keyboard teleop -> /cmd_vel
 #   ./run.sh obstacle [speed]            # autonomous brake/cruise demo
+#   ./run.sh scan                        # trigger one room scan -> /scan (LaserScan); needs bridge running
 #   ./run.sh shell                       # a shell in the image (ros2 topic echo, ...)
 #   ./run.sh video                       # web_video_server  -> browser http://localhost:8080
 #   ./run.sh foxglove                    # foxglove_bridge   -> Foxglove Studio ws://localhost:8765
@@ -80,6 +81,14 @@ case "${1:-bridge}" in
     docker run "${COMMON[@]}" "$IMAGE" \
       python3 obstacle_stop.py --ros-args -p cruise_speed:="${2:-0.0}"
     ;;
+  scan)
+    # Trigger ONE room scan on the already-running bridge (./run.sh bridge).
+    # Sweeps the steering servo (rangefinder geared 3:1) and publishes /scan;
+    # open rviz (./run.sh rviz) to watch the 2D room cross-section build.
+    echo ">> triggering a room scan — watch /scan (./run.sh rviz). Bridge must be running."
+    docker run "${COMMON[@]}" "$IMAGE" \
+      ros2 service call /scan_room std_srvs/srv/Trigger "{}"
+    ;;
   shell)
     docker run "${COMMON[@]}" "$IMAGE" bash
     ;;
@@ -102,7 +111,7 @@ case "${1:-bridge}" in
       ros2 run rqt_image_view rqt_image_view /camera/image_raw
     ;;
   *)
-    echo "usage: $0 {build|bridge|teleop|obstacle [speed]|shell|video|foxglove|rviz|image}" >&2
+    echo "usage: $0 {build|bridge|teleop|obstacle [speed]|scan|shell|video|foxglove|rviz|image}" >&2
     exit 2
     ;;
 esac

@@ -283,6 +283,7 @@ See [`examples/`](examples/) for runnable scripts:
 - [`examples/blink_rgb.py`](examples/blink_rgb.py) — smallest possible SDK use
 - [`examples/drive_wiggle.py`](examples/drive_wiggle.py) — drive a short pattern
 - [`examples/telemetry_monitor.py`](examples/telemetry_monitor.py) — stream telem to stdout
+- [`examples/room_scan.py`](examples/room_scan.py) — sweep the steering-geared laser rangefinder and polar-plot a 2D room map
 
 ## Protocol reference
 

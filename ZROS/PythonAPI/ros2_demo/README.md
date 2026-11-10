@@ -54,9 +54,11 @@ sudo service docker start        # once per session (WSL doesn't auto-start Dock
 | ROS → car | `/servo_angle` | `std_msgs/Int32` | an aux hobby servo (`aux_servo_pin`, default 4) |
 | car → ROS | `/camera/image_raw` | `sensor_msgs/Image` (bgr8) | live JPEG, decoded |
 | car → ROS | `/imu/data` | `sensor_msgs/Imu` | MPU6050 accel + heading/pitch/roll |
-| car → ROS | `/range` | `sensor_msgs/Range` | VL53L5CX nearest distance |
+| car → ROS | `/range` | `sensor_msgs/Range` | VL53L5CX straight-ahead distance |
+| car → ROS | `/scan` | `sensor_msgs/LaserScan` | swept-rangefinder 2D room scan (see §5) |
+| ROS → car | `/scan_room` *(service)* | `std_srvs/Trigger` | run one room scan |
 
-The bridge also publishes static TF: `base_link → camera_link / imu_link / tof_link`.
+The bridge also publishes static TF: `base_link → camera_link / imu_link / tof_link / laser`.
 It's a **car**, not a tank: `angular.z` steers the front wheels while `linear.x`
 drives — it won't spin in place.
 
@@ -143,9 +145,27 @@ Open **Foxglove Studio** (desktop app or https://app.foxglove.dev) → *Open con
 ```bash
 ./run.sh rviz
 ```
-Loads `zrcar.rviz` (camera Image + Range cone + TF frames). On **Windows/WSLg** (Win 11) the window pops up automatically via the display forwarding in `run.sh`. On a headless box you'll get `could not connect to display` — use **(a)** or **(b)** instead. (`./run.sh image` is the lighter `rqt_image_view`, same display requirement.)
+Loads `zrcar.rviz` (camera Image + Range cone + **RoomScan** `/scan` + TF frames). On **Windows/WSLg** (Win 11) the window pops up automatically via the display forwarding in `run.sh`. On a headless box you'll get `could not connect to display` — use **(a)** or **(b)** instead. (`./run.sh image` is the lighter `rqt_image_view`, same display requirement.)
 
-## 5. Let it drive itself — autonomy demo
+## 5. Scan the room — a live 2D map (`/scan`)
+
+The VL53 rangefinder is geared **3:1 to the steering servo** (36T→12T), so sweeping the
+steering servo ±60° swings the laser a full ±180° — a cheap single-beam lidar. Call the
+`scan_room` service and the bridge sweeps the servo, reads the straight-ahead distance at
+each step, and publishes one `sensor_msgs/LaserScan` on `/scan`:
+```bash
+# bridge running in Terminal 1, rviz open in Terminal 2 (RoomScan display = /scan)
+./run.sh scan          # == ros2 service call /scan_room std_srvs/srv/Trigger
+```
+Watch the green `/scan` points trace the room outline in rviz. The sweep takes ~25–30 s
+(121 beams × a short settle); the car stays put and ignores teleop steering while it scans.
+
+- **Mirrored?** Flip the gear sign: `./run.sh bridge -p scan_gear:=-3.0`.
+- **Tune:** `scan_servo_min`/`scan_servo_max` (sweep width), `scan_center` (90 = forward),
+  `scan_step` (bigger = faster/coarser), `scan_settle` (raise if readings smear).
+- **No ROS?** `../examples/room_scan.py` does the same sweep and polar-plots it with matplotlib.
+
+## 6. Let it drive itself — autonomy demo
 
 `obstacle_stop.py` is a pure ROS node (subscribes `/range`, publishes `/cmd_vel`). Stop teleop first.
 ```bash
@@ -154,7 +174,7 @@ Loads `zrcar.rviz` (camera Image + Range cone + TF frames). On **Windows/WSLg** 
 ```
 > A "behaviour" in ROS is just a node between a sensor topic and a command topic.
 
-## 6. Record & inspect
+## 7. Record & inspect
 
 ```bash
 ros2 bag record -a -o zrcar_run   # drive around, Ctrl-C, then: ros2 bag play zrcar_run
