@@ -139,13 +139,26 @@ then open `http://localhost:8080/stream_viewer?topic=/camera/image_raw` in a bro
 ```bash
 ./run.sh foxglove
 ```
-Open **Foxglove Studio** (desktop app or https://app.foxglove.dev) → *Open connection* → `ws://localhost:8765`. Add Image / 3D / Raw Message panels.
+Open **Foxglove** (desktop app or https://app.foxglove.dev) → *Open connection* → `ws://localhost:8765`.
+Then **Layouts → Import from file → [`zrcar.foxglove.json`](zrcar.foxglove.json)** (this folder) for a ready-made ZRCar layout:
+
+| Panel | Shows |
+|---|---|
+| **3D** | TF frames + `/range` + the **`/scan` room map** — run `./run.sh scan` to populate it. This is the mapping view, and it needs **no X display**. |
+| **Camera** | `/camera/image_raw` |
+| **Range & servo** | `/range.range` (ToF distance) + `/servo_angle.data` |
+| **Motion** | `/cmd_vel` throttle/steer + `/imu/data` yaw rate |
+| **Logs** | `/rosout` — the `car.raw failed: not connected` lines are **harmless** keepalive during (re)connect |
+
+> If a panel imports as "unknown" on your Foxglove version, delete it and add that panel manually (then set the topic) — the rest of the layout still loads. (The in-app AI assistant can also build panels, but the file above gives everyone the same starting point.)
 
 **(c) rviz — the classic (needs a display):**
 ```bash
 ./run.sh rviz
 ```
 Loads `zrcar.rviz` (camera Image + Range cone + **RoomScan** `/scan` + TF frames). On **Windows/WSLg** (Win 11) the window pops up automatically via the display forwarding in `run.sh`. On a headless box you'll get `could not connect to display` — use **(a)** or **(b)** instead. (`./run.sh image` is the lighter `rqt_image_view`, same display requirement.)
+
+> **Getting a GUI (rviz/gazebo) up from WSL:** `run.sh` already forwards the display on **WSLg** (Windows 11 — run `wsl --update` once if `echo $DISPLAY` is empty). On **Windows 10** there's no WSLg: run an X server (e.g. VcXsrv) and `export DISPLAY=<windows-ip>:0` before `./run.sh rviz`. **Gazebo** has the same display requirement but is a much bigger lift (needs a robot URDF + a world) — for room mapping today, the `/scan` + Foxglove **3D** panel above gets you there without any of that.
 
 ## 5. Scan the room — a live 2D map (`/scan`)
 

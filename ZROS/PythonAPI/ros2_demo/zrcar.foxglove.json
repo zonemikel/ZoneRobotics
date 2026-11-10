@@ -1,0 +1,102 @@
+{
+  "configById": {
+    "Image!cam": {
+      "imageMode": { "imageTopic": "/camera/image_raw" }
+    },
+    "3D!view": {
+      "cameraState": {
+        "distance": 7,
+        "perspective": false,
+        "phi": 0,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 0,
+        "fovy": 0.7853981633974483,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followTf": "base_link",
+      "scene": { "labelScaleFactor": 1 },
+      "transforms": {
+        "base_link": { "visible": true },
+        "laser": { "visible": true },
+        "tof_link": { "visible": true },
+        "camera_link": { "visible": true },
+        "imu_link": { "visible": true }
+      },
+      "topics": {
+        "/scan": { "visible": true },
+        "/range": { "visible": true }
+      },
+      "layers": {
+        "grid": {
+          "layerId": "foxglove.Grid",
+          "frameId": "base_link",
+          "size": 8,
+          "divisions": 16,
+          "lineWidth": 0.5,
+          "color": "#888888",
+          "frameLocked": true,
+          "order": 1,
+          "visible": true
+        }
+      }
+    },
+    "Plot!range": {
+      "title": "Range & servo",
+      "paths": [
+        { "value": "/range.range", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/servo_angle.data", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "Plot!motion": {
+      "title": "Motion (cmd_vel + IMU yaw rate)",
+      "paths": [
+        { "value": "/cmd_vel.linear.x", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/cmd_vel.angular.z", "enabled": true, "timestampMethod": "receiveTime" },
+        { "value": "/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime" }
+      ],
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RosOut!log": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "topicToRender": "/rosout"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": { "speed": 1 },
+  "layout": {
+    "direction": "row",
+    "splitPercentage": 50,
+    "first": "3D!view",
+    "second": {
+      "direction": "column",
+      "splitPercentage": 40,
+      "first": "Image!cam",
+      "second": {
+        "direction": "column",
+        "splitPercentage": 40,
+        "first": "Plot!range",
+        "second": {
+          "direction": "column",
+          "splitPercentage": 55,
+          "first": "Plot!motion",
+          "second": "RosOut!log"
+        }
+      }
+    }
+  }
+}
