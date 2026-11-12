@@ -26,8 +26,8 @@ Notes:
 
     python room_scan.py <bot-ip>
 
-Requires matplotlib + numpy for the plot (pip install matplotlib numpy). If
-matplotlib is missing it still scans and writes the CSV.
+Requires matplotlib for the plot (pip install matplotlib). If it's missing the
+script still scans and writes the CSV.
 """
 import math
 import sys
@@ -94,39 +94,97 @@ def save_csv(path, angles, distances, servos):
     print(f"Wrote {path}")
 
 
+def _nice_rings(maxr):
+    """A few evenly-spaced ring radii (m) up to maxr, for scale."""
+    step = 0.5 if maxr <= 3 else (1.0 if maxr <= 6 else 2.0)
+    rings, r = [], step
+    while r <= maxr * 1.05:
+        rings.append(round(r, 2))
+        r += step
+    return rings or [round(maxr, 2)]
+
+
 def plot_room(angles, distances):
+    """Draw a top-down room map (lidar style): robot at the centre, faint scan
+    rays, and the wall hits traced into connected segments — broken at corners /
+    openings (big range jumps) and gaps (missing beams) so it reads like a floor
+    plan instead of scattered dots. Forward (beam 0) points up."""
     try:
         import matplotlib
-        import numpy as np
     except Exception:
-        print("matplotlib/numpy not installed — skipping plot "
-              "(pip install matplotlib numpy). CSV still written.")
+        print("matplotlib not installed — skipping plot "
+              "(pip install matplotlib). CSV still written.")
         return
-    # Use a file backend if there's no display (e.g. headless / WSL).
     import os
     if not os.environ.get("DISPLAY") and sys.platform != "win32":
-        matplotlib.use("Agg")
+        matplotlib.use("Agg")  # headless / WSL: write the PNG, no window
     import matplotlib.pyplot as plt
 
-    a = [ang for ang, d in zip(angles, distances) if d is not None]
-    r = [d for d in distances if d is not None]
-    if not r:
+    # Valid points as (angle_rad, range_m), sorted by angle for wall tracing.
+    pts = sorted(((a, d / 100.0) for a, d in zip(angles, distances) if d is not None),
+                 key=lambda p: p[0])
+    if not pts:
         print("No valid points to plot.")
         return
+    valid, total = len(pts), len(distances)
 
-    fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
-    ax.set_theta_zero_location("N")   # forward (beam 0°) points up
-    ax.set_theta_direction(1)         # +angle = counter-clockwise (= left), ROS-style
-    sc = ax.scatter(a, r, s=8, c=r, cmap="viridis")
-    ax.set_rmax(max(r) * 1.15)
-    ax.set_rticks([50, 100, 150, 200, 300])
-    ax.set_rlabel_position(-22.5)
-    ax.grid(True)
-    fig.colorbar(sc, ax=ax, label="distance (cm)", pad=0.1)
-    plt.title("ZRCar room scan", va="bottom")
+    # Top-down cartesian: forward (beam 0) = +y (up); +angle = left (-x).
+    xs = [-r * math.sin(a) for a, r in pts]
+    ys = [r * math.cos(a) for a, r in pts]
+    maxr = max(r for _, r in pts)
+
+    plt.style.use("dark_background")
+    fig, ax = plt.subplots(figsize=(7, 7))
+    bg = "#0a0d14"
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+
+    # Range rings for scale (metres).
+    for rr in _nice_rings(maxr):
+        ax.add_patch(plt.Circle((0, 0), rr, fill=False, ec="#243049", lw=0.8, zorder=1))
+        ax.text(0.02, rr, f"{rr:g} m", color="#55637d", fontsize=8, ha="left", va="bottom", zorder=2)
+
+    # Scan rays robot -> each hit, faint (the "lidar" look).
+    for x, y in zip(xs, ys):
+        ax.plot([0, x], [0, y], color="#1b8fff", alpha=0.10, lw=0.6, zorder=2)
+
+    # Trace walls: connect consecutive hits, but BREAK at a big range jump
+    # (corner / doorway) or a wide angular gap (missing beams) so we never draw
+    # a fake wall straight across open space.
+    jump = max(0.35, maxr * 0.18)
+    seg_x, seg_y = [xs[0]], [ys[0]]
+    for i in range(1, len(pts)):
+        dr = abs(pts[i][1] - pts[i - 1][1])
+        dth = pts[i][0] - pts[i - 1][0]
+        if dr > jump or dth > math.radians(10):
+            if len(seg_x) > 1:
+                ax.plot(seg_x, seg_y, color="#39d98a", lw=2.2, solid_capstyle="round", zorder=4)
+            seg_x, seg_y = [], []
+        seg_x.append(xs[i])
+        seg_y.append(ys[i])
+    if len(seg_x) > 1:
+        ax.plot(seg_x, seg_y, color="#39d98a", lw=2.2, solid_capstyle="round", zorder=4)
+
+    # Wall hit points, robot marker, forward arrow.
+    ax.scatter(xs, ys, s=10, c="#eaf2ff", zorder=5, linewidths=0)
+    ax.scatter([0], [0], s=70, c="#00d9ff", zorder=6)
+    ax.annotate("", xy=(0, maxr * 0.16), xytext=(0, 0),
+                arrowprops=dict(color="#00d9ff", width=1.4, headwidth=8, headlength=8), zorder=6)
+
+    lim = maxr * 1.15
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_aspect("equal")
+    ax.grid(False)
+    ax.set_title(f"ZRCar room scan   ·   {valid}/{total} valid beams   ·   forward ↑",
+                 color="#eaf2ff", fontsize=12, pad=12)
+    ax.set_xlabel("←  left     metres     right  →", color="#8a98b5", fontsize=9)
+    for s in ax.spines.values():
+        s.set_color("#243049")
+    ax.tick_params(colors="#55637d")
 
     out = "room_scan.png"
-    plt.savefig(out, dpi=120, bbox_inches="tight")
+    plt.savefig(out, dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
     print(f"Saved {out}")
     try:
         plt.show()
