@@ -55,10 +55,19 @@ sudo service docker start        # once per session (WSL doesn't auto-start Dock
 | car → ROS | `/camera/image_raw` | `sensor_msgs/Image` (bgr8) | live JPEG, decoded |
 | car → ROS | `/imu/data` | `sensor_msgs/Imu` | MPU6050 accel + heading/pitch/roll |
 | car → ROS | `/range` | `sensor_msgs/Range` | VL53L5CX straight-ahead distance |
-| car → ROS | `/scan` | `sensor_msgs/LaserScan` | swept-rangefinder 2D room scan (see §5) |
+| car → ROS | `/scan` | `sensor_msgs/LaserScan` | last room scan, flat 2D (see §5) |
+| car → ROS | `/scan_cloud` | `sensor_msgs/PointCloud2` | last room scan, every zone in 3D |
+| car → ROS | `/map_cloud` | `sensor_msgs/PointCloud2` | all scans so far, 3D (latched) |
+| car → ROS | `/map` | `nav_msgs/OccupancyGrid` | floor map from all scans (latched) |
+| car → ROS | `/robot_marker` | `visualization_msgs/MarkerArray` | a simple car outline on `base_link` |
 | ROS → car | `/scan_room` *(service)* | `std_srvs/Trigger` | run one room scan |
+| ROS → car | `/scan_loop` *(service)* | `std_srvs/SetBool` | keep scanning (`true`) / stop (`false`) |
+| ROS → car | `/clear_map` *(service)* | `std_srvs/Trigger` | empty the map + zero the heading |
 
-The bridge also publishes static TF: `base_link → camera_link / imu_link / tof_link / laser`.
+TF: **`odom → base_link`** comes from the IMU — the car model in rviz **turns with the
+heading and tilts with pitch/roll** (rotation only: there are no wheel encoders, so
+the bridge can't know *where* the car drove). Plus static `base_link → camera_link /
+imu_link / tof_link / laser`.
 It's a **car**, not a tank: `angular.z` steers the front wheels while `linear.x`
 drives — it won't spin in place.
 
@@ -66,8 +75,9 @@ drives — it won't spin in place.
 
 - **Docker**, on a Linux host **or Windows via WSL2** (see the WSL2 section below).
 - Your ZRCar on the **same LAN**; note its IP from the bot's `/console` (examples use `192.168.1.46`).
-- On the bot's `/console → 🔧 Components`, enable **Camera**, **IMU**, and **Rangefinder**
+- On the bot's main page (`http://<bot-ip>/` → **Info → 🔧 Components**), enable **Camera**, **IMU**, and **Rangefinder**
   (IMU + rangefinder are **OFF by default** — if they're off, `/imu`/`/range` stay silent). Restart the bot after enabling.
+  The IMU is only detected at boot, so restart after re-wiring it too.
 - **Close the browser `/car` tab** — the bot serves one WebSocket client at a time, and an open `/car` page steals the stream from the bridge.
 
 Everything below runs from this folder (`ZROS/PythonAPI/ros2_demo`).
@@ -156,27 +166,54 @@ Then **Layouts → Import from file → [`zrcar.foxglove.json`](zrcar.foxglove.j
 ```bash
 ./run.sh rviz
 ```
-Loads `zrcar.rviz` (camera Image + Range cone + **RoomScan** `/scan` + TF frames). On **Windows/WSLg** (Win 11) the window pops up automatically via the display forwarding in `run.sh`. On a headless box you'll get `could not connect to display` — use **(a)** or **(b)** instead. (`./run.sh image` is the lighter `rqt_image_view`, same display requirement.)
+Loads `zrcar.rviz`: the **Map** (`/map` floor map), **RoomCloud** (`/map_cloud`, coloured by height), the **Car** outline (turns/tilts with the IMU), the Range cone, TF and the camera image. Fixed frame is `odom`. (The flat `/scan` **RoomScan** display is there too, unticked.) On **Windows/WSLg** (Win 11) the window pops up automatically via the display forwarding in `run.sh`. On a headless box you'll get `could not connect to display` — use **(a)** or **(b)** instead. (`./run.sh image` is the lighter `rqt_image_view`, same display requirement.)
 
 > **Getting a GUI (rviz/gazebo) up from WSL:** `run.sh` already forwards the display on **WSLg** (Windows 11 — run `wsl --update` once if `echo $DISPLAY` is empty). On **Windows 10** there's no WSLg: run an X server (e.g. VcXsrv) and `export DISPLAY=<windows-ip>:0` before `./run.sh rviz`. **Gazebo** has the same display requirement but is a much bigger lift (needs a robot URDF + a world) — for room mapping today, the `/scan` + Foxglove **3D** panel above gets you there without any of that.
 
-## 5. Scan the room — a live 2D map (`/scan`)
+## 5. Scan the room — a map in rviz (`/map`, `/map_cloud`, `/scan`)
 
-The VL53 rangefinder is geared **3:1 to the steering servo** (36T→12T), so sweeping the
-steering servo ±60° swings the laser a full ±180° — a cheap single-beam lidar. Call the
-`scan_room` service and the bridge sweeps the servo, reads the straight-ahead distance at
-each step, and publishes one `sensor_msgs/LaserScan` on `/scan`:
+The VL53L5CX rangefinder is geared **3:1 to the steering servo** (36T→12T), so sweeping the
+steering servo ±60° swings it a full ±180°. It isn't a single beam: it's a tiny **4×4 / 8×8
+depth camera** (~45° field of view). At every servo step the bridge reads the **whole zone
+grid** and turns every zone into its own ray (beam direction + that zone's offset in the
+field of view), so a flat wall comes out as a straight line instead of an arc.
 ```bash
-# bridge running in Terminal 1, rviz open in Terminal 2 (RoomScan display = /scan)
-./run.sh scan          # == ros2 service call /scan_room std_srvs/srv/Trigger
+# bridge running in Terminal 1, rviz open in Terminal 2
+./run.sh scan          # one sweep (~35 s): /scan + /scan_cloud, added to /map + /map_cloud
+./run.sh scan loop     # keep sweeping (car stays still);  ./run.sh scan stop  to end
+./run.sh clear         # empty the map and zero the heading — a fresh start
 ```
-Watch the green `/scan` points trace the room outline in rviz. The sweep takes ~25–30 s
-(121 beams × a short settle); the car stays put and ignores teleop steering while it scans.
+The car stays put and ignores teleop while it scans — **the steering servo *is* the scanner**,
+so it can't steer during a sweep. Scans **add up**: turn the car in place (by hand or a
+short drive) and scan again — the IMU heading keeps the new sweep lined up with the map.
+Driving somewhere new will **not** line up: with no wheel encoders the bridge can't tell how
+far the car moved (that needs odometry — see *Next steps*). Run `./run.sh clear` first.
 
-- **Mirrored?** Flip the gear sign: `./run.sh bridge -p scan_gear:=-3.0`.
-- **Tune:** `scan_servo_min`/`scan_servo_max` (sweep width), `scan_center` (90 = forward),
-  `scan_step` (bigger = faster/coarser), `scan_settle` (raise if readings smear).
-- **No ROS?** `../examples/room_scan.py` does the same sweep and polar-plots it with matplotlib.
+**Use 8×8:** on the `/car` page → ToF settings → resolution **8×8** (64 zones, 5.6° each, the
+bot restarts once). 4×4 works too, just coarser (11°).
+
+**Calibrate once** (depends on how the gears were meshed on *your* car). Put a flat wall
+~40 cm straight in front, `./run.sh clear`, `./run.sh scan`, and look where the wall lands:
+
+| The wall in front shows up… | Restart the bridge with |
+|---|---|
+| in front ✅ | nothing to do |
+| on the **left** | `-p scan_offset_deg:=-90` |
+| on the **right** | `-p scan_offset_deg:=90` |
+| behind | `-p scan_offset_deg:=180` |
+| in front, but the room is **mirrored** (left box drawn on the right) | `-p scan_gear:=-3.0` |
+| walls look doubled / smeared even after that | `-p scan_zone_flip:=true` |
+
+e.g. `BOT_IP=192.168.0.72 ./run.sh bridge -p scan_offset_deg:=-90`. In between, fine-tune
+with small values (`-p scan_offset_deg:=-84`).
+
+- **Tune:** `scan_servo_min`/`scan_servo_max` (sweep width), `scan_center` (90 = straight),
+  `scan_step` (bigger = faster/coarser), `scan_settle` (raise if walls smear),
+  `scan_min_range` (0.12 m — drops the car's own chassis when the beam swings backwards),
+  `map_resolution` / `map_size` (5 cm cells, 8 m square).
+- **Clear the view:** `./run.sh clear` (or rviz's **Reset** button bottom-left for the displays).
+- **No ROS?** `../examples/room_scan.py` does a simple single-beam sweep and plots it with
+  matplotlib (and the `/car` page has a 🗺️ Room Scan button).
 
 ## 6. Let it drive itself — autonomy demo
 
@@ -198,7 +235,11 @@ ros2 run rqt_graph rqt_graph      # live node/topic graph (needs a display)
 
 `robot_ip`, `linear_scale` (x=1.0→%throttle), `steer_scale` (z=1.0→steer°),
 `steer_trim` (centre offset°), `min_throttle` (stiction floor %), `aux_servo_pin`,
-`framesize` (QQVGA/QVGA/VGA…), `publish_image`, `cmd_timeout`.
+`framesize` (QQVGA/QVGA/VGA…), `publish_image`, `cmd_timeout`,
+`camera_vflip` / `camera_hmirror` (1 = flip on the sensor, -1 = leave as is — camera
+upside down? set both to 1), and the scan params in §5 (`scan_offset_deg`, `scan_gear`,
+`scan_zone_flip`, `scan_settle`, `scan_min_range`, `scan_max_range`, `scan_bin_deg`,
+`scan_loop_pause`, `map_resolution`, `map_size`, `clear_resets_heading`).
 
 ## Troubleshooting
 
@@ -207,12 +248,19 @@ ros2 run rqt_graph rqt_graph      # live node/topic graph (needs a display)
 | **Topics listed but `echo` shows nothing / teleop won't drive** | containers aren't sharing memory — `run.sh` must use **`--ipc=host`** (it does; rebuild/re-copy if you edited it). Without it, nodes discover but exchange no data. |
 | `connection reset` loop in the bridge | two clients fighting for the bot's one WS slot → a stale bridge container (`docker kill $(docker ps -q)`, run ONE) or an open browser `/car` tab (close it). |
 | No `/camera/image_raw` frames | camera off on the bot, or a browser `/car` tab is holding the stream. |
-| No `/imu` or `/range` | IMU/rangefinder are **OFF by default** — enable in `/console → Components` + restart. |
+| Room scan: walls on the wrong side / mirrored | calibrate once — §5 (`scan_offset_deg`, `scan_gear`). |
+| Room scan: walls curved, objects smeared | update to this bridge (it uses every zone); set the rangefinder to **8×8**; raise `scan_settle`. |
+| Camera upside down in rviz | `./run.sh bridge -p camera_vflip:=1 -p camera_hmirror:=1` |
+| Car model doesn't turn/tilt | IMU off or not detected (enable + restart the bot; it's detected at boot only). |
+| No `/imu` or `/range` | IMU/rangefinder are **OFF by default** — enable on the bot's main page → Info → Components + restart. |
 | `could not connect to display` (rviz/rqt) | no X display in this environment → use `./run.sh video` or `./run.sh foxglove`. On WSLg it should forward automatically. |
 | `rsv is not implemented` | `websocket-client` too new — the image pins **1.6.4**; rebuild. |
 | Motor only buzzes at low speed | raise teleop speed, or `-p min_throttle:=60`. |
 
 ## Next steps
-- Turn the 8×8 ToF grid (telemetry key `dg`) into a `LaserScan` for real nav.
+- **A real car model:** export the Onshape design to URDF (e.g. `onshape-to-robot`) and run
+  `robot_state_publisher` — it replaces the simple `/robot_marker` outline.
+- **Map while driving:** needs odometry (wheel encoders, or a forward-facing optical-flow
+  sensor) → publish `odom → base_link` *position* → then `slam_toolbox` can build a proper map.
 - Add a `/battery` + `/temperature` topic from the telemetry (keys `b`/`t`).
 - Map `/cmd_vel` through `nav2` for waypoint driving.

@@ -3,9 +3,8 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /TF1
-        - /Range1
-        - /RoomScan1
+        - /Map1
+        - /RoomCloud1
       Splitter Ratio: 0.5
 Visualization Manager:
   Class: ""
@@ -18,13 +17,87 @@ Visualization Manager:
       Plane Cell Count: 20
       Color: 160; 160; 164
       Value: true
+    # Floor map built from every sweep (white = free floor, black = wall,
+    # grey = unknown). ./run.sh clear empties it.
+    - Class: rviz_default_plugins/Map
+      Name: Map
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Color Scheme: map
+      Alpha: 0.7
+      Draw Behind: true
+      Value: true
+    # Every zone of every sweep in 3D (coloured by height).
+    - Class: rviz_default_plugins/PointCloud2
+      Name: RoomCloud
+      Enabled: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_cloud
+      Style: Flat Squares
+      Size (m): 0.02
+      Color Transformer: AxisColor
+      Axis: Z
+      Use Fixed Frame: true
+      Decay Time: 0
+      Alpha: 1
+      Value: true
+    # The last sweep as a classic 2D LaserScan.
+    - Class: rviz_default_plugins/LaserScan
+      Name: RoomScan
+      Enabled: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /scan
+      Style: Flat Squares
+      Size (m): 0.03
+      Color Transformer: FlatColor
+      Color: 0; 255; 128
+      Alpha: 1
+      Decay Time: 0
+      Value: false
+    # The car itself (turns with the heading, tilts with pitch/roll).
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Car
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_marker
+      Value: true
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true
-      Show Names: true
+      Show Names: false
       Show Axes: true
       Show Arrows: false
-      Marker Scale: 0.3
+      Marker Scale: 0.2
+      Value: true
+    - Class: rviz_default_plugins/Range
+      Name: Range
+      Enabled: true
+      Buffer Length: 1
+      Color: 255; 40; 0
+      Alpha: 0.4
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /range
       Value: true
     - Class: rviz_default_plugins/Image
       Name: Camera
@@ -38,38 +111,9 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /camera/image_raw
       Value: true
-    - Class: rviz_default_plugins/Range
-      Name: Range
-      Enabled: true
-      Buffer Length: 1
-      Color: 255; 40; 0
-      Alpha: 0.5
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /range
-      Value: true
-    - Class: rviz_default_plugins/LaserScan
-      Name: RoomScan
-      Enabled: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /scan
-      Style: Flat Squares
-      Size (m): 0.04
-      Color Transformer: FlatColor
-      Color: 0; 255; 128
-      Alpha: 1
-      Decay Time: 0
-      Value: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: base_link
+    Fixed Frame: odom
     Frame Rate: 30
   Tools:
     - Class: rviz_default_plugins/MoveCamera
@@ -82,13 +126,13 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/Orbit
       Name: Current View
-      Distance: 1.8
+      Distance: 3.0
       Focal Point:
-        X: 0.1
+        X: 0
         Y: 0
         Z: 0
-      Pitch: 0.4
-      Yaw: 3.6
+      Pitch: 1.1
+      Yaw: 3.14
     Saved: ~
 Window Geometry:
   Displays:

@@ -27,7 +27,7 @@ WORKDIR /app
 # them without rebuilding). To bake a self-contained image instead, copy the
 # PythonAPI dir into the build context and uncomment:
 #   COPY zrsense.py /app/zrsense.py
-#   COPY ros2_demo/zros_driver.py ros2_demo/obstacle_stop.py /app/
+#   COPY ros2_demo/zros_driver.py ros2_demo/scan_geometry.py ros2_demo/obstacle_stop.py /app/
 
 # Default: run the bridge. Override the IP with -p robot_ip:=<your-bot-ip>.
 CMD ["python3", "zros_driver.py", "--ros-args", "-p", "robot_ip:=192.168.1.46"]

@@ -41,6 +41,11 @@ SERVO_MAX    = 150     # steering servo sweep end   (deg)
 SERVO_CENTER = 90      # servo angle at which the rangefinder points forward
 GEAR_RATIO   = 3.0     # rangefinder degrees per servo degree (36T→12T = 3:1).
                        # Flip the SIGN to -3.0 if your map comes out mirrored.
+SCAN_OFFSET  = 0       # where the rangefinder points (deg, + = left) with the
+                       # steering straight — depends on how the gears were
+                       # meshed. A wall straight ahead drawn on the LEFT: -90;
+                       # on the RIGHT: 90; behind: 180. (Same as the ROS
+                       # bridge's scan_offset_deg and /car's Rotate.)
 STEP         = 1       # servo step in degrees (1° = finest; bigger = faster)
 SETTLE       = 0.20    # s to wait after each move so a FRESH ranging frame
                        # lands (sensor ranges at 5 Hz → ~0.2 s per frame)
@@ -75,7 +80,7 @@ def run_room_scan(bot):
         d_mm = reply.get("distanceMm", -1) if reply else -1
 
         # Gear maps servo angle → beam angle. 0 rad = straight ahead.
-        beam_deg = (servo_angle - SERVO_CENTER) * GEAR_RATIO
+        beam_deg = (servo_angle - SERVO_CENTER) * GEAR_RATIO + SCAN_OFFSET
         angles.append(math.radians(beam_deg))
         servos.append(servo_angle)
         distances.append(None if d_mm is None or d_mm < 0 else d_mm / 10.0)  # → cm
@@ -183,9 +188,17 @@ def plot_room(angles, distances):
         s.set_color("#243049")
     ax.tick_params(colors="#55637d")
 
-    out = "room_scan.png"
+    out = os.path.abspath("room_scan.png")
     plt.savefig(out, dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
     print(f"Saved {out}")
+    # Only open a window when matplotlib really has a GUI backend here. On a
+    # headless box / WSL / Docker without one it uses "agg", where plt.show()
+    # can't draw and only prints a UserWarning — the PNG above is the result.
+    backend = matplotlib.get_backend().lower()
+    if backend in ("agg", "pdf", "ps", "svg", "pgf", "cairo", "template"):
+        print("No plot window here (matplotlib has no GUI backend) — open the PNG above.\n"
+              "For a window: sudo apt install python3-tk  (or: pip install pyqt5).")
+        return
     try:
         plt.show()
     except Exception:

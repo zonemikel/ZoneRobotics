@@ -5,7 +5,9 @@
 #   BOT_IP=192.168.1.46 ./run.sh bridge  # run the ROS<->bot bridge (leave running)
 #   ./run.sh teleop                      # keyboard teleop -> /cmd_vel
 #   ./run.sh obstacle [speed]            # autonomous brake/cruise demo
-#   ./run.sh scan                        # trigger one room scan -> /scan (LaserScan); needs bridge running
+#   ./run.sh scan                        # one room scan -> /scan, /map_cloud, /map; needs bridge running
+#   ./run.sh scan loop | scan stop       # keep scanning / stop after the current sweep
+#   ./run.sh clear                       # empty the map (+ zero the heading) for a fresh start
 #   ./run.sh shell                       # a shell in the image (ros2 topic echo, ...)
 #   ./run.sh video                       # web_video_server  -> browser http://localhost:8080
 #   ./run.sh foxglove                    # foxglove_bridge   -> Foxglove Studio ws://localhost:8765
@@ -62,6 +64,11 @@ if [ -d /mnt/wslg ]; then
 elif [ -d /tmp/.X11-unix ]; then
   GUI=(-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix)
 fi
+# GPU for rviz's OpenGL when the host exposes it (else Mesa software rendering:
+# works, just slower). Tip from a tester running rviz/gazebo from WSL + Docker.
+if [ ${#GUI[@]} -gt 0 ] && [ -e /dev/dri ]; then
+  GUI+=(--device /dev/dri)
+fi
 
 case "${1:-bridge}" in
   build)
@@ -82,12 +89,31 @@ case "${1:-bridge}" in
       python3 obstacle_stop.py --ros-args -p cruise_speed:="${2:-0.0}"
     ;;
   scan)
-    # Trigger ONE room scan on the already-running bridge (./run.sh bridge).
-    # Sweeps the steering servo (rangefinder geared 3:1) and publishes /scan;
-    # open rviz (./run.sh rviz) to watch the 2D room cross-section build.
-    echo ">> triggering a room scan — watch /scan (./run.sh rviz). Bridge must be running."
+    # Room scan on the already-running bridge (./run.sh bridge). Sweeps the
+    # steering servo (rangefinder geared 3:1) and publishes /scan, /map_cloud and
+    # /map; open rviz (./run.sh rviz) to watch the map build.
+    case "${2:-once}" in
+      loop)
+        echo ">> continuous scanning ON — ./run.sh scan stop to end. Bridge must be running."
+        docker run "${COMMON[@]}" "$IMAGE" \
+          ros2 service call /scan_loop std_srvs/srv/SetBool "{data: true}"
+        ;;
+      stop)
+        docker run "${COMMON[@]}" "$IMAGE" \
+          ros2 service call /scan_loop std_srvs/srv/SetBool "{data: false}"
+        ;;
+      *)
+        echo ">> triggering a room scan — watch it in rviz (./run.sh rviz). Bridge must be running."
+        docker run "${COMMON[@]}" "$IMAGE" \
+          ros2 service call /scan_room std_srvs/srv/Trigger "{}"
+        ;;
+    esac
+    ;;
+  clear)
+    # Forget every sweep (map + clouds) and zero the heading: a fresh map that
+    # starts with the car facing "forward".
     docker run "${COMMON[@]}" "$IMAGE" \
-      ros2 service call /scan_room std_srvs/srv/Trigger "{}"
+      ros2 service call /clear_map std_srvs/srv/Trigger "{}"
     ;;
   shell)
     docker run "${COMMON[@]}" "$IMAGE" bash
@@ -111,7 +137,7 @@ case "${1:-bridge}" in
       ros2 run rqt_image_view rqt_image_view /camera/image_raw
     ;;
   *)
-    echo "usage: $0 {build|bridge|teleop|obstacle [speed]|scan|shell|video|foxglove|rviz|image}" >&2
+    echo "usage: $0 {build|bridge|teleop|obstacle [speed]|scan [loop|stop]|clear|shell|video|foxglove|rviz|image}" >&2
     exit 2
     ;;
 esac
