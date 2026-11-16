@@ -193,9 +193,57 @@ class _Camera(_Device):
     def brightness(self, value: int) -> None:  self._s("set_brightness", value=int(value))
     def contrast(self, value: int) -> None:    self._s("set_contrast",   value=int(value))
     def saturation(self, value: int) -> None:  self._s("set_saturation", value=int(value))
-    def take_photo(self) -> None:
-        """Save a photo to the bot's SD card (if mounted)."""
-        self._s("takePhoto")
+    def take_photo(
+        self,
+        framesize: Optional[str] = None,
+        format: str = "JPEG",
+        count: int = 1,
+        quality: int = 10,
+        skip: Optional[int] = None,
+        wait: bool = True,
+        timeout: float = 180.0,
+    ) -> Optional[Dict[str, Any]]:
+        """Save photo(s) to the bot's SD card (photos/ folder).
+
+            bot.camera.take_photo()                  # one quick frame, same as the live stream
+            bot.camera.take_photo("max")             # full resolution: OV2640 2 MP, OV3660 3 MP, OV5640 5 MP
+            bot.camera.take_photo("UXGA", count=3)   # three 1600x1200 JPEGs
+            bot.camera.take_photo("SXGA", format="GRAYSCALE")   # .pgm
+
+        framesize: None = same as the stream; otherwise VGA / SVGA / XGA / HD /
+                   SXGA / UXGA / FHD / QXGA / QSXGA or "max" (clamped to the sensor).
+        format:    JPEG (.jpg) | RGB565 (.bmp) | YUV422 (raw .yuv) | GRAYSCALE (.pgm)
+        count:     pictures per call, 1..20
+        quality:   JPEG 4..63 (lower = better, bigger files)
+        skip:      frames dropped first while exposure settles (default 5)
+
+        A full-resolution shot re-inits the camera, so the live video pauses
+        a few seconds. Works over the local network only.
+
+        Returns the bot's reply when wait=True — {"files": [...], "width": ...}
+        or {"error": "..."} — or None on timeout / wait=False. Loop it with
+        bot.wait(seconds) for a timelapse.
+        """
+        params: Dict[str, Any] = {}
+        if framesize is not None:
+            params.update(framesize=str(framesize), format=str(format).upper(),
+                          count=max(1, min(20, int(count))), quality=max(4, min(63, int(quality))))
+            if skip is not None:
+                params["skip"] = max(0, min(30, int(skip)))
+        elif count and int(count) > 1:
+            params.update(sameAsStream=True, count=max(1, min(20, int(count))))
+        ask = lambda: self._bot.send(self.device_name, "takePhoto", **params)
+        if not wait:
+            ask()
+            return None
+        return self._bot.wait_for(
+            lambda m: "files" in m or "filename" in m or "error" in m,
+            timeout=timeout, ask=ask)
+    def settings(self, timeout: float = 3.0) -> Optional[Dict[str, Any]]:
+        """Current camera settings, plus the sensor model and the largest
+        photo size it supports (model / maxFramesize / maxWidth / maxHeight)."""
+        return self._bot.wait_for(lambda m: "aec_value" in m and "framesize" in m,
+                                  timeout=timeout, ask=lambda: self._s("get_settings"))
     def grab_frame(self, timeout: float = 2.0) -> Optional[bytes]:
         """Grab the next JPEG frame from the live LAN video stream and
         return it as raw bytes (what you'd write straight into a .jpg
@@ -290,6 +338,11 @@ class _Car(_Device):
     def raw(self, throttle: int) -> None:
         """throttle in -100..+100 (negative = reverse)."""
         self._s("raw", throttle=int(throttle))
+    def pulse(self, throttle: int, ms: int = 200) -> None:
+        """Run the motor at `throttle` (-100..+100) for exactly `ms` (1..5000),
+        then the bot stops it by itself — e.g. a focus motor on a camera
+        mount (/cam "Focus ±"). Needs firmware with per-command `ms`."""
+        self._s("raw", throttle=int(throttle), ms=max(1, min(5000, int(ms))))
     def set_steering(self, angle: int) -> None:
         """angle 0..180° — 90 is centred by default (see setSteerConfig)."""
         self._s("setSteering", angle=int(angle))

@@ -23,6 +23,7 @@ Uses the CarDevice — single rear motor + steering (servo or dual-GPIO).
 | `bot.car.backward()` | Full throttle backward |
 | `bot.car.stop()` | Motor off |
 | `bot.car.raw(throttle)` | `-100..+100` — negative = reverse |
+| `bot.car.pulse(throttle, ms=200)` | Run the motor for exactly `ms` (1–5000), then the bot stops it — e.g. a focus motor (`/cam` Focus ±) |
 | `bot.car.left(offset=90)` | Steer left. `offset` 0 = straight, 90 = full lock |
 | `bot.car.right(offset=90)` | Steer right. Same scale |
 | `bot.car.center()` | Steering back to straight |
@@ -102,8 +103,17 @@ if jpg:
 | `bot.camera.brightness(value)` | `-2..+2` |
 | `bot.camera.contrast(value)` | `-2..+2` |
 | `bot.camera.saturation(value)` | `-2..+2` |
-| `bot.camera.take_photo()` | Save to SD card (if mounted) |
+| `bot.camera.take_photo()` | Save one quick frame (same as the live stream) to the SD card |
+| `bot.camera.take_photo("max", format="JPEG", count=1, quality=10)` | **Full-resolution photo(s) to the SD card** — `framesize` VGA…UXGA / FHD / QXGA / QSXGA or `"max"` (OV2640 2 MP, OV3660 3 MP, OV5640 5 MP); `format` JPEG (.jpg) / RGB565 (.bmp) / YUV422 (.yuv) / GRAYSCALE (.pgm); `count` 1–20. Video pauses a few seconds. Returns `{"files": [...]}` or `{"error": ...}` |
+| `bot.camera.settings()` | Current camera settings + `model` and the largest photo size (`maxFramesize`, `maxWidth`, `maxHeight`) |
 | **`bot.camera.grab_frame(timeout=2.0)`** | **Return next JPEG as bytes — pass to cv2 / PIL** |
+
+Timelapse — a full-resolution photo every minute, saved on the bot's SD card:
+```python
+while True:
+    print(bot.camera.take_photo("max"))
+    bot.wait(60)
+```
 
 Grab + decode with OpenCV:
 ```python
