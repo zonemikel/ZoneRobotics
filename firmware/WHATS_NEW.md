@@ -10,6 +10,9 @@ on your Wi-Fi → **🔄 Update** → **Update from Server**.
      1.0.7.868c49c) and the date is the one in the file name; then "- " bullet
      points in plain language. Newest first. -->
 
+## 1.0.7.f6c3386 — 2026-11-28
+- Camera page: tap to move, the info header and the focus and home buttons are now on by default, and the settings open only when you tap ⚙.
+
 ## 1.0.7.647a3c9 — 2026-11-27
 - Clearer button order on the bot page: Camera, Car, Tank, Console, Programmer, Blocks, Custom ("Viewer" is now "Custom").
 - The Custom page is only about your own control layout now: 3 short steps, and a hint when something is missing.
